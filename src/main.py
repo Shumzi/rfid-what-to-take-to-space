@@ -13,6 +13,14 @@ from pathlib import Path
 from PIL import Image, ImageTk
 import cv2
 
+# Try to import VLC, fallback gracefully if not available
+try:
+    import vlc
+    VLC_AVAILABLE = True
+except ImportError:
+    VLC_AVAILABLE = False
+    print("Warning: python-vlc not available. Video playback will use slower OpenCV fallback.")
+
 
 CONFIG_FILE = "config.json"
 IMAGES_DIR = "data/images"
@@ -26,10 +34,13 @@ class RFIDImageDisplay:
         self.inactivity_timer = None
         self.running = True
         self.rfid_buffer = ""  # Buffer for RFID input characters
-        self.video_cap = None  # Video capture object
+        self.video_cap = None  # Video capture object (for fallback)
         self.video_playing = False
         self.video_thread = None
         self.stop_video_flag = threading.Event()
+        self.vlc_instance = None  # VLC instance
+        self.vlc_player = None  # VLC media player
+        self.vlc_frame = None  # Frame for VLC video embedding
         
         # Setup window
         self.setup_window()
@@ -86,6 +97,23 @@ class RFIDImageDisplay:
         # Create label for displaying images
         self.image_label = tk.Label(self.root, bg='black')
         self.image_label.pack(expand=True, fill='both')
+        
+        # Initialize VLC instance
+        if VLC_AVAILABLE:
+            try:
+                # VLC options optimized for Raspberry Pi
+                vlc_options = [
+                    '--no-xlib',
+                    '--quiet',
+                    '--intf', 'dummy',
+                ]
+                self.vlc_instance = vlc.Instance(vlc_options)
+            except Exception as e:
+                print(f"Warning: Could not initialize VLC: {e}")
+                print("Video playback will use slower OpenCV fallback.")
+                self.vlc_instance = None
+        else:
+            self.vlc_instance = None
     
     def get_media_path(self, filename):
         """Get full path to a media file (image or video)."""
@@ -101,15 +129,31 @@ class RFIDImageDisplay:
         if self.video_playing:
             self.stop_video_flag.set()
             self.video_playing = False
+            
+            # Stop VLC player if active
+            if self.vlc_player is not None:
+                self.vlc_player.stop()
+                self.vlc_player.release()
+                self.vlc_player = None
+            
+            # Hide VLC frame if visible
+            if self.vlc_frame is not None:
+                self.vlc_frame.pack_forget()
+                self.vlc_frame = None
+            
+            # Stop OpenCV fallback if active
             if self.video_cap is not None:
                 self.video_cap.release()
                 self.video_cap = None
             if self.video_thread is not None:
                 self.video_thread.join(timeout=1.0)
                 self.video_thread = None
+            
+            # Show image label again
+            self.image_label.pack(expand=True, fill='both')
     
     def play_video(self, video_filename):
-        """Play a video file fullscreen."""
+        """Play a video file fullscreen using VLC."""
         video_path = self.get_media_path(video_filename)
         
         if not video_path.exists():
@@ -118,6 +162,90 @@ class RFIDImageDisplay:
         
         # Stop any currently playing video
         self.stop_video()
+        
+        # Try VLC first (hardware accelerated)
+        if self.vlc_instance is not None:
+            try:
+                return self._play_video_vlc(str(video_path))
+            except Exception as e:
+                print(f"Error playing video with VLC: {e}")
+                print("Falling back to OpenCV...")
+        
+        # Fallback to OpenCV if VLC fails
+        return self._play_video_opencv(video_filename)
+    
+    def _play_video_vlc(self, video_path):
+        """Play video using VLC (hardware accelerated)."""
+        try:
+            # Hide image label
+            self.image_label.pack_forget()
+            
+            # Create frame for VLC video
+            self.vlc_frame = tk.Frame(self.root, bg='black')
+            self.vlc_frame.pack(expand=True, fill='both')
+            
+            # Force window update to ensure frame is mapped
+            self.root.update_idletasks()
+            self.root.update()
+            
+            # Create VLC media player
+            self.vlc_player = self.vlc_instance.media_player_new()
+            
+            # Get window ID after frame is mapped
+            window_id = self.vlc_frame.winfo_id()
+            
+            # Set video output to the frame's window ID
+            if os.name == 'nt':  # Windows
+                self.vlc_player.set_hwnd(window_id)
+            else:  # Linux (Raspberry Pi)
+                # On X11, we need to convert the Tk window ID to X11 window ID
+                # Tkinter's winfo_id() returns the X11 window ID directly on Linux
+                self.vlc_player.set_xwindow(window_id)
+            
+            # Create media object
+            media = self.vlc_instance.media_new(video_path)
+            self.vlc_player.set_media(media)
+            
+            # Set up event manager to detect when video ends
+            if VLC_AVAILABLE:
+                event_manager = self.vlc_player.event_manager()
+                event_manager.event_attach(vlc.EventType.MediaPlayerEndReached, self._on_vlc_video_finished)
+            
+            # Play video
+            self.video_playing = True
+            self.vlc_player.play()
+            
+            # Wait a moment to check if playback started successfully
+            time.sleep(0.2)
+            if VLC_AVAILABLE:
+                state = self.vlc_player.get_state()
+                if state == vlc.State.Error:
+                    raise Exception("VLC failed to start playback")
+            
+            print(f"Playing video with VLC: {video_path}")
+            return True
+            
+        except Exception as e:
+            print(f"Error in VLC playback: {e}")
+            import traceback
+            traceback.print_exc()
+            # Cleanup on error
+            if self.vlc_player is not None:
+                try:
+                    self.vlc_player.stop()
+                    self.vlc_player.release()
+                except:
+                    pass
+                self.vlc_player = None
+            if self.vlc_frame is not None:
+                self.vlc_frame.pack_forget()
+                self.vlc_frame = None
+            self.image_label.pack(expand=True, fill='both')
+            return False
+    
+    def _play_video_opencv(self, video_filename):
+        """Fallback: Play video using OpenCV (slower, but works if VLC unavailable)."""
+        video_path = self.get_media_path(video_filename)
         
         try:
             # Open video file
@@ -139,14 +267,20 @@ class RFIDImageDisplay:
             self.video_thread = threading.Thread(target=self._video_loop, args=(fps,), daemon=True)
             self.video_thread.start()
             
+            print(f"Playing video with OpenCV (fallback): {video_filename}")
             return True
         except Exception as e:
             print(f"Error loading video {video_filename}: {e}")
             self.stop_video()
             return False
     
+    def _on_vlc_video_finished(self, event):
+        """Handle VLC video playback completion."""
+        # This is called from VLC's event thread, so we need to schedule on main thread
+        self.root.after(0, self._on_video_finished)
+    
     def _video_loop(self, fps):
-        """Video playback loop running in a separate thread."""
+        """Video playback loop running in a separate thread (OpenCV fallback only)."""
         frame_delay = int(1000 / fps) if fps > 0 else 33  # milliseconds per frame
         
         screen_width = self.root.winfo_screenwidth()
@@ -162,6 +296,7 @@ class RFIDImageDisplay:
                 break
             
             # Resize frame to fit screen while maintaining aspect ratio
+            # Use faster interpolation for better performance on Pi
             frame_height, frame_width = frame.shape[:2]
             scale_w = screen_width / frame_width
             scale_h = screen_height / frame_height
@@ -170,7 +305,8 @@ class RFIDImageDisplay:
             new_width = int(frame_width * scale)
             new_height = int(frame_height * scale)
             
-            frame_resized = cv2.resize(frame, (new_width, new_height), interpolation=cv2.INTER_LANCZOS4)
+            # Use LINEAR instead of LANCZOS4 for better performance
+            frame_resized = cv2.resize(frame, (new_width, new_height), interpolation=cv2.INTER_LINEAR)
             
             # Convert BGR to RGB for tkinter
             frame_rgb = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2RGB)
@@ -360,6 +496,10 @@ class RFIDImageDisplay:
         self.running = False
         # Stop any playing video
         self.stop_video()
+        # Release VLC instance
+        if self.vlc_instance is not None:
+            self.vlc_instance.release()
+            self.vlc_instance = None
         # The RFID thread is a daemon thread, so it will exit automatically
         self.root.quit()
         self.root.destroy()
