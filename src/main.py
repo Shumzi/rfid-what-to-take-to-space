@@ -101,12 +101,36 @@ class RFIDImageDisplay:
         # Initialize VLC instance
         if VLC_AVAILABLE:
             try:
-                # VLC options optimized for Raspberry Pi
-                vlc_options = [
-                    '--no-xlib',
-                    '--quiet',
-                    '--intf', 'dummy',
-                ]
+                # Detect if running on Raspberry Pi
+                is_raspberry_pi = False
+                try:
+                    if os.path.exists('/proc/device-tree/model'):
+                        with open('/proc/device-tree/model', 'r') as f:
+                            model = f.read()
+                            if 'Raspberry Pi' in model:
+                                is_raspberry_pi = True
+                except:
+                    pass
+                
+                if is_raspberry_pi:
+                    # VLC options optimized for Raspberry Pi with hardware acceleration
+                    vlc_options = [
+                        '--quiet',
+                        '--intf', 'dummy',
+                        '--mmal-vout',  # Use MMAL video output (hardware accelerated)
+                        '--mmal-hw-dec',  # Use hardware decoding
+                        '--no-osd',
+                        '--no-video-title-show',
+                    ]
+                else:
+                    # Standard VLC options for other systems
+                    vlc_options = [
+                        '--quiet',
+                        '--intf', 'dummy',
+                        '--no-osd',
+                        '--no-video-title-show',
+                    ]
+                
                 self.vlc_instance = vlc.Instance(vlc_options)
             except Exception as e:
                 print(f"Warning: Could not initialize VLC: {e}")
@@ -174,9 +198,60 @@ class RFIDImageDisplay:
         # Fallback to OpenCV if VLC fails
         return self._play_video_opencv(video_filename)
     
+    def _is_raspberry_pi(self):
+        """Check if running on Raspberry Pi."""
+        try:
+            if os.path.exists('/proc/device-tree/model'):
+                with open('/proc/device-tree/model', 'r') as f:
+                    model = f.read()
+                    return 'Raspberry Pi' in model
+        except:
+            pass
+        return False
+    
     def _play_video_vlc(self, video_path):
         """Play video using VLC (hardware accelerated)."""
         try:
+            # On Raspberry Pi, try launching VLC as separate fullscreen process first
+            # This uses hardware acceleration better than embedding
+            if self._is_raspberry_pi():
+                import subprocess
+                try:
+                    # Hide tkinter window temporarily
+                    self.root.withdraw()
+                    
+                    # Launch VLC in fullscreen with hardware acceleration
+                    vlc_cmd = [
+                        'vlc',
+                        '--fullscreen',
+                        '--no-osd',
+                        '--quiet',
+                        '--intf', 'dummy',
+                        '--mmal-vout',  # Hardware accelerated video output
+                        '--mmal-hw-dec',  # Hardware decoding
+                        '--no-video-title-show',
+                        str(video_path)
+                    ]
+                    
+                    print(f"Launching VLC as separate process for hardware acceleration: {video_path}")
+                    
+                    # Run VLC and wait for it to finish
+                    process = subprocess.Popen(vlc_cmd)
+                    self.video_playing = True
+                    
+                    # Monitor process while keeping tkinter responsive
+                    self._monitor_vlc_process(process)
+                    
+                    return True
+                    
+                except Exception as e:
+                    print(f"Failed to launch VLC as separate process: {e}")
+                    print("Falling back to embedded VLC...")
+                    # Show window again if we hid it
+                    self.root.deiconify()
+                    self.root.attributes('-fullscreen', True)
+            
+            # Fallback to embedded VLC
             # Hide image label
             self.image_label.pack_forget()
             
@@ -188,6 +263,9 @@ class RFIDImageDisplay:
             self.root.update_idletasks()
             self.root.update()
             
+            # Small delay to ensure window is ready
+            time.sleep(0.2)
+            
             # Create VLC media player
             self.vlc_player = self.vlc_instance.media_player_new()
             
@@ -198,8 +276,7 @@ class RFIDImageDisplay:
             if os.name == 'nt':  # Windows
                 self.vlc_player.set_hwnd(window_id)
             else:  # Linux (Raspberry Pi)
-                # On X11, we need to convert the Tk window ID to X11 window ID
-                # Tkinter's winfo_id() returns the X11 window ID directly on Linux
+                # On X11, Tkinter's winfo_id() returns the X11 window ID directly
                 self.vlc_player.set_xwindow(window_id)
             
             # Create media object
@@ -216,7 +293,7 @@ class RFIDImageDisplay:
             self.vlc_player.play()
             
             # Wait a moment to check if playback started successfully
-            time.sleep(0.2)
+            time.sleep(0.3)
             if VLC_AVAILABLE:
                 state = self.vlc_player.get_state()
                 if state == vlc.State.Error:
@@ -225,7 +302,7 @@ class RFIDImageDisplay:
             # Start periodic update to keep event loop running
             self._update_vlc_playback()
             
-            print(f"Playing video with VLC: {video_path}")
+            print(f"Playing video with embedded VLC: {video_path}")
             return True
             
         except Exception as e:
@@ -244,7 +321,28 @@ class RFIDImageDisplay:
                 self.vlc_frame.pack_forget()
                 self.vlc_frame = None
             self.image_label.pack(expand=True, fill='both')
+            # Ensure window is visible
+            self.root.deiconify()
+            self.root.attributes('-fullscreen', True)
             return False
+    
+    def _monitor_vlc_process(self, process):
+        """Monitor VLC process while keeping tkinter event loop running."""
+        if not self.video_playing:
+            return
+        
+        # Check if process is still running
+        if process.poll() is None:
+            # Process still running, check again in 100ms
+            self.root.after(100, lambda: self._monitor_vlc_process(process))
+        else:
+            # Process finished
+            self.video_playing = False
+            # Show tkinter window again
+            self.root.deiconify()
+            self.root.attributes('-fullscreen', True)
+            # Return to welcome image
+            self._on_video_finished()
     
     def _update_vlc_playback(self):
         """Periodically update to keep event loop running during VLC playback."""
