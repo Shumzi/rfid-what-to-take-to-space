@@ -7,6 +7,7 @@ Plays videos using VLC subprocess with hardware acceleration.
 import os
 import subprocess
 import threading
+import shutil
 from pathlib import Path
 
 
@@ -24,6 +25,7 @@ class VideoPlayer:
         self.current_process = None
         self.lock = threading.Lock()
         self._is_playing = False
+        self.vlc_executable = self._find_vlc_executable()
     
     def play(self, video_filename):
         """
@@ -50,14 +52,13 @@ class VideoPlayer:
         try:
             if is_raspberry_pi:
                 # Use hardware acceleration on Raspberry Pi
+                # VLC will auto-detect hardware acceleration if available
                 vlc_cmd = [
                     'vlc',
                     '--fullscreen',
                     '--no-osd',
                     '--quiet',
                     '--intf', 'dummy',
-                    '--mmal-vout',  # Hardware accelerated video output
-                    '--mmal-hw-dec',  # Hardware decoding
                     '--no-video-title-show',
                     str(video_path)
                 ]
@@ -72,6 +73,14 @@ class VideoPlayer:
                     '--no-video-title-show',
                     str(video_path)
                 ]
+            
+            if not self.vlc_executable:
+                raise FileNotFoundError(
+                    "VLC not found. Please install VLC media player or add it to your PATH."
+                )
+            
+            # Use found VLC executable
+            vlc_cmd[0] = self.vlc_executable
             
             print(f"Playing video: {video_path}")
             
@@ -130,6 +139,35 @@ class VideoPlayer:
                 if self.current_process == process:
                     self.current_process = None
                     self._is_playing = False
+    
+    def _find_vlc_executable(self):
+        """Find VLC executable path."""
+        # First, try to find 'vlc' in PATH
+        vlc_path = shutil.which('vlc')
+        if vlc_path:
+            return vlc_path
+        
+        # On Windows, check common installation paths
+        if os.name == 'nt':
+            common_paths = [
+                r'C:\Program Files\VideoLAN\VLC\vlc.exe',
+                r'C:\Program Files (x86)\VideoLAN\VLC\vlc.exe',
+            ]
+            for path in common_paths:
+                if os.path.exists(path):
+                    return path
+        
+        # On Linux/Mac, VLC should be in PATH, but try common locations
+        elif os.name == 'posix':
+            common_paths = [
+                '/usr/bin/vlc',
+                '/usr/local/bin/vlc',
+            ]
+            for path in common_paths:
+                if os.path.exists(path):
+                    return path
+        
+        return None
     
     def _is_raspberry_pi(self):
         """Check if running on Raspberry Pi."""
