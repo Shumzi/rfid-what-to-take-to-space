@@ -222,6 +222,9 @@ class RFIDImageDisplay:
                 if state == vlc.State.Error:
                     raise Exception("VLC failed to start playback")
             
+            # Start periodic update to keep event loop running
+            self._update_vlc_playback()
+            
             print(f"Playing video with VLC: {video_path}")
             return True
             
@@ -242,6 +245,23 @@ class RFIDImageDisplay:
                 self.vlc_frame = None
             self.image_label.pack(expand=True, fill='both')
             return False
+    
+    def _update_vlc_playback(self):
+        """Periodically update to keep event loop running during VLC playback."""
+        if not self.video_playing or self.vlc_player is None:
+            return
+        
+        # Check if video is still playing
+        if VLC_AVAILABLE:
+            state = self.vlc_player.get_state()
+            # If video ended or errored, handle it
+            if state == vlc.State.Ended or state == vlc.State.Error:
+                self.root.after(0, self._on_video_finished)
+                return
+        
+        # Keep event loop running - update every 100ms
+        # This prevents the app from freezing on Raspberry Pi
+        self.root.after(100, self._update_vlc_playback)
     
     def _play_video_opencv(self, video_filename):
         """Fallback: Play video using OpenCV (slower, but works if VLC unavailable)."""
