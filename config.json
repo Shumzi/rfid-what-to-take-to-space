@@ -5,7 +5,9 @@
     "212": "apple.jpg",
     "111": "apple.jpg",
     "555": "pineapple.jpg",
-    "666": "pineapple.jpg"
+    "666": "pineapple.jpg",
+    "4294954551": "apple.jpg",
+    "1080": "video.mp4"
   },
   "inactivity_timeout": 2,
   "welcome_image": "welcome.jpg"
