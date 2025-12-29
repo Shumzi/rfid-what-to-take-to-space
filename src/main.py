@@ -41,6 +41,7 @@ class RFIDImageDisplay:
         self.vlc_instance = None  # VLC instance
         self.vlc_player = None  # VLC media player
         self.vlc_frame = None  # Frame for VLC video embedding
+        self.vlc_process = None  # VLC subprocess (for separate process mode)
         
         # Setup window
         self.setup_window()
@@ -154,10 +155,28 @@ class RFIDImageDisplay:
             self.stop_video_flag.set()
             self.video_playing = False
             
-            # Stop VLC player if active
+            # Stop VLC subprocess if active (separate process mode)
+            if self.vlc_process is not None:
+                try:
+                    self.vlc_process.terminate()
+                    self.vlc_process.wait(timeout=2.0)
+                except:
+                    try:
+                        self.vlc_process.kill()
+                    except:
+                        pass
+                self.vlc_process = None
+                # Ensure window is visible again
+                self.root.deiconify()
+                self.root.attributes('-fullscreen', True)
+            
+            # Stop VLC player if active (embedded mode)
             if self.vlc_player is not None:
-                self.vlc_player.stop()
-                self.vlc_player.release()
+                try:
+                    self.vlc_player.stop()
+                    self.vlc_player.release()
+                except:
+                    pass
                 self.vlc_player = None
             
             # Hide VLC frame if visible
@@ -236,11 +255,11 @@ class RFIDImageDisplay:
                     print(f"Launching VLC as separate process for hardware acceleration: {video_path}")
                     
                     # Run VLC and wait for it to finish
-                    process = subprocess.Popen(vlc_cmd)
+                    self.vlc_process = subprocess.Popen(vlc_cmd)
                     self.video_playing = True
                     
                     # Monitor process while keeping tkinter responsive
-                    self._monitor_vlc_process(process)
+                    self._monitor_vlc_process(self.vlc_process)
                     
                     return True
                     
