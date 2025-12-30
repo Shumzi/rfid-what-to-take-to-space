@@ -36,7 +36,7 @@
 #include <Keyboard.h>
 #include <SPI.h>
 #include <MFRC522.h>
-#define BUZ_PIN 11//buzzer output active high 
+#define BUZ_PIN 7//buzzer output active high 
 #define SS_PIN 10
 #define RST_PIN 9
  
@@ -49,10 +49,11 @@ void setup() {
   pinMode(BUZ_PIN, OUTPUT);//
   digitalWrite(BUZ_PIN, LOW);//no sound
   Keyboard.begin();
-//  Serial.begin(9600);
+  Serial.begin(115200);
   SPI.begin(); // Init SPI bus
   rfid.PCD_Init(); // Init MFRC522 
 //  Keyboard.println("MIFARE Classsic NUID tester");
+  Serial.println("init");
 }
  
 void loop() {
@@ -86,13 +87,16 @@ void loop() {
    if (0==0){ 
 //    Serial.println(F("A new card has been detected."));
     // Store NUID into nuidPICC array
-    for (byte i = 0; i < 4; i++) {
+    for (byte i = 0; i < 3; i++) {
       nuidPICC[i] = rfid.uid.uidByte[i];
     }
     digitalWrite(BUZ_PIN, HIGH);
     delay(200);//0.5 sec beep
     digitalWrite(BUZ_PIN, LOW);
+    Serial.println(String(rfid.uid.size));
+   // Serial.println(String(rfid.uid.uidByte));
     KeySend(rfid.uid.uidByte, rfid.uid.size);
+   
 
   }
 //  else Serial.println(F("Card read previously."));
@@ -114,10 +118,10 @@ void KeySend(byte *buffer, byte bufferSize) {
     rfid_NUID += buffer[0] << 24;
     rfid_NUID += buffer[1] << 16; 
     rfid_NUID += buffer[2] << 8;
-    rfid_NUID += buffer[3]; 
+    rfid_NUID += buffer[3];  
     String thisString = String(rfid_NUID);
     Keyboard.println(thisString);      
-//    Serial.println(thisString);      
+    Serial.println(thisString);      
 //    Keyboard.println("===============");
 }
 void printHex(byte *buffer, byte bufferSize) {

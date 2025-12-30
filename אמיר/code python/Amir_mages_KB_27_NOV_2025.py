@@ -3,12 +3,13 @@ from PIL import Image, ImageTk, ImageOps
 
 # consts
 STRING_END = "Return"
-RFID_1 = "4294947269"  # card tad
-RFID_2 = "11579"  # blue tag
-RFID_3 = "15834"  # sticker 1
-RFID_4 = "15578"  # sticker 2
+RFID_1 = "4294963697"  # card tad
+RFID_2 = "4294966257"  # blue tag
+RFID_3 = "27651"  # sticker 1
+RFID_4 = "27395"  # sticker 2
 RFID_5 = "15322"  # sticker 3
 RFID_6 = "15066"  # sticker 4
+
 
 BG_IMAGE_SIZE = [1200, 900]
 BG_IMAGE_TL = [0, 0]
@@ -52,9 +53,8 @@ def index_up(index_type):
 
     global input_string
     global current_bg_image_index, current_fg_image_index
-    print(index_type)
-    print(input_string)
     input_string = input_string + index_type
+    print(input_string)
     if index_type == STRING_END:
         if input_string == RFID_1 + STRING_END:
             load_BG_image_INDEX(1)
