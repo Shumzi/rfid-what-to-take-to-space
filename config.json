@@ -9,6 +9,8 @@
     "4294954551": "apple.jpg",
     "1080": "video.mp4"
   },
+  "welcome_video": "data/images/welcome.mp4",
   "inactivity_timeout": 2,
-  "welcome_image": "welcome.jpg"
+  "vlc_port": 5000,
+  "vlc_ip": "localhost"
 }

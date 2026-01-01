@@ -4,10 +4,8 @@ Video Player for RFID Video Player.
 Plays videos using VLC subprocess with hardware acceleration.
 """
 
-import os
-import subprocess
-import threading
-import shutil
+import vlc
+import json
 from pathlib import Path
 
 
@@ -22,14 +20,13 @@ class VideoPlayer:
             media_dir: Directory containing video files
         """
         self.media_dir = Path(media_dir)
-        self.current_process = None
-        self.lock = threading.Lock()
+        self.config = json.load(open('config.json','r'))
+        self.player = vlc.MediaPlayer()
         self._is_playing = False
-        self.vlc_executable = self._find_vlc_executable()
     
     def play(self, video_filename):
         """
-        Play a video file.
+        Play a video file, then go back to welcome screen.
         
         Args:
             video_filename: Name of video file (relative to media_dir)
@@ -43,60 +40,16 @@ class VideoPlayer:
             print(f"Warning: Video not found: {video_path}")
             return False
         
-        # Stop any currently playing video
-        self.stop()
-        
-        # Check if running on Raspberry Pi for hardware acceleration
-        is_raspberry_pi = self._is_raspberry_pi()
-        
         try:
-            if is_raspberry_pi:
-                # Use hardware acceleration on Raspberry Pi
-                # VLC will auto-detect hardware acceleration if available
-                vlc_cmd = [
-                    'vlc',
-                    '--fullscreen',
-                    '--no-osd',
-                    '--quiet',
-                    '--intf', 'dummy',
-                    '--no-video-title-show',
-                    str(video_path)
-                ]
-            else:
-                # Standard VLC for other systems
-                vlc_cmd = [
-                    'vlc',
-                    '--fullscreen',
-                    '--no-osd',
-                    '--quiet',
-                    '--intf', 'dummy',
-                    '--no-video-title-show',
-                    str(video_path)
-                ]
-            
+
             if not self.vlc_executable:
                 raise FileNotFoundError(
                     "VLC not found. Please install VLC media player or add it to your PATH."
                 )
             
-            # Use found VLC executable
-            vlc_cmd[0] = self.vlc_executable
-            
             print(f"Playing video: {video_path}")
             
-            # Start VLC in subprocess
-            with self.lock:
-                self.current_process = subprocess.Popen(vlc_cmd)
-                self._is_playing = True
-            
-            # Monitor process in background thread
-            monitor_thread = threading.Thread(
-                target=self._monitor_process,
-                args=(self.current_process,),
-                daemon=True
-            )
-            monitor_thread.start()
-            
+            vlc.
             return True
             
         except Exception as e:
