@@ -1,16 +1,21 @@
 {
-  "rfid_mappings": {
+    "metadata": {
+        "data_folder": "data",
+        "inactivity_timeout": 2
+    },
     "123": "pear.jpg",
     "464": "pear.jpg",
     "212": "apple.jpg",
     "111": "apple.jpg",
-    "555": "pineapple.jpg",
+    "555": "pear.jpg",
     "666": "pineapple.jpg",
     "4294954551": "apple.jpg",
-    "1080": "video.mp4"
-  },
-  "welcome_video": "data/images/welcome.mp4",
-  "inactivity_timeout": 2,
-  "vlc_port": 5000,
-  "vlc_ip": "localhost"
+    "1080": "video.mp4",
+    "welcome_video": "welcome.mp4",
+    "305": "pear.jpg",
+    "001": "apple.jpg",
+    "383": "apple.jpg",
+    "1010": "10-Watermelon.mp4",
+    "0101": "10-Watermelon.mp4",
+    "5454": "13-Tablet.mp4"
 }
