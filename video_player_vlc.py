@@ -1,0 +1,107 @@
+import vlc
+from pathlib import PurePath, Path
+import json
+
+class VideoPlayer:
+    def __init__(self) -> None:
+        self.instance: vlc.Instance = vlc.Instance("--fullscreen", "--no-video-title-show")
+        self.player: vlc.MediaPlayer = self.instance.media_player_new()
+        self.playlist_player: vlc.MediaListPlayer = self.instance.media_list_player_new()
+        self.playlist_player.set_media_player(self.player)
+        self.config = json.load(open('config.json','r'))
+        self.welcome_video_media = self.instance.media_new(self._get_video_path('welcome_video'))
+        self.play_welcome()
+    
+    def _on_end(self, event):
+        """
+        since our playlist contains the video + welcome screen, 
+        when we start a new media (i.e. the welcome screen), we want the playlist to repeat it infinitly.
+        """
+        self.playlist_player.set_playback_mode(vlc.PlaybackMode.repeat)
+
+
+    def set_on_end(self,):
+        """
+        setup callback for end of first video in playlist.
+        """
+        event_manager = self.player.event_manager()
+        self._end_callback = lambda event: self._on_end(event)
+        event_manager.event_attach(vlc.EventType.MediaPlayerMediaChanged , self._end_callback)
+
+    def shutdown(self):
+        """
+
+        """
+        self.player.stop()
+        self.player.release()
+        self.playlist_player.release()
+        self.instance.release()
+
+    def _get_video_path(self ,puck_code):
+        return str(PurePath(self.config['metadata']['data_folder'], self.config[puck_code]))
+
+    def play_video(self, puck_code):
+        self.playlist_player.set_playback_mode(vlc.PlaybackMode.default)
+        
+        if not puck_code in self.config:
+            print(f"code {puck_code} not found")
+            return
+        
+        media_path = self._get_video_path(puck_code)
+        media = self.instance.media_new(media_path)
+        playlist = self.instance.media_list_new()
+        playlist.add_media(media)
+        playlist.add_media(self.welcome_video_media)
+        self.playlist_player.set_media_list(playlist)
+        self.playlist_player.play_item_at_index(0)
+
+    def save_dict(self):
+        with open('config.json','w') as f:
+            json.dump(self.config, f, indent=4)
+
+    def play_welcome(self):
+        self.play_video('welcome_video')
+
+    def _add_new_puck(self, path = None):
+        code = input('drop puck: ').strip('\n')
+        if not path:
+            paths = list(Path(self.config['metadata']['data_folder']).iterdir())
+            for i,k in enumerate(paths):
+                print(f"{i+1}. {k.name}")
+            choice = input('type the key number requested: ')
+            self.config[code] = paths[int(choice)-1].name
+        else:
+            self.config[code] = path
+        print(f"set code {code} to video file {self.config[code]}")
+        return self.config[code]
+    
+    def add_new_puck(self):
+        self.player.stop()
+        add_pucks = True
+        while add_pucks:
+            path = self._add_new_puck()
+            other_side = input("set other side? Y/n: ").strip('\n').lower()
+            if other_side == 'y' or other_side == '':
+                self._add_new_puck(path)
+            another_puck = input("set another puck? Y/n: ").strip('\n').lower()
+            if another_puck == 'n':
+                add_pucks = False
+        
+        print('saving to dict...')
+        self.save_dict()
+
+if __name__=="__main__":
+    v = VideoPlayer()
+    try:
+        while True:
+            res = input().strip('\n').lower()
+            if res=='exit':
+                v.shutdown()
+                break
+            elif res=='calibrate':
+                v.add_new_puck()
+            else:
+                v.play_video(res)
+    except KeyboardInterrupt:
+        print("exiting gracefully")
+        v.shutdown()
