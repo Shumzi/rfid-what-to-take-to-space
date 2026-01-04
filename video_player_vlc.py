@@ -84,7 +84,7 @@ class VideoPlayer:
         """
         code = input('drop puck: ').strip('\n')
         if not path:
-            paths = list(Path(self.config['metadata']['data_folder']).iterdir())
+            paths = sorted(Path(self.config['metadata']['data_folder']).iterdir())
             for i,k in enumerate(paths):
                 print(f"{i+1}. {k.name}")
             choice = input('type the key number requested: ')
