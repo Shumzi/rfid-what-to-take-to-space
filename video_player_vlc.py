@@ -98,6 +98,7 @@ class VideoPlayer:
         """
         Lets user add [2 sided] puck[s]
         Updates config.json as well as the config dict.
+        goes back to welcome screen at the end.
         """
         self.player.stop()
         add_pucks = True
@@ -112,6 +113,7 @@ class VideoPlayer:
         
         print('saving to dict...')
         self.save_dict()
+        self.play_welcome()
 
 if __name__=="__main__":
     v = VideoPlayer()
