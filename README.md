@@ -12,3 +12,6 @@ calibration flow (done by operator when registering new disk):
 3. operator chooses corresponding file to be shown
 4. optionally sets the other side as well
 5. optionally add another puck.
+
+## rpi autostart
+for now using ~/.bashrc to source venv and run python script. in future issue we'll run it from tmux so we can ssh into running sess.
