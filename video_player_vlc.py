@@ -9,7 +9,7 @@ class VideoPlayer:
         self.playlist_player: vlc.MediaListPlayer = self.instance.media_list_player_new()
         self.playlist_player.set_media_player(self.player)
         self.config = json.load(open('config.json','r'))
-        self.welcome_video = self.instance.media_new(self.config['welcome_video'])
+        self.welcome_video_media = self.instance.media_new(self._get_video_path('welcome_video'))
         self.play_welcome()
     
     def _on_end(self, event):
@@ -37,6 +37,9 @@ class VideoPlayer:
         self.playlist_player.release()
         self.instance.release()
 
+    def _get_video_path(self ,puck_code):
+        return str(PurePath(self.config['metadata']['data_folder'], self.config[puck_code]))
+
     def play_video(self, puck_code):
         self.playlist_player.set_playback_mode(vlc.PlaybackMode.default)
         
@@ -44,11 +47,11 @@ class VideoPlayer:
             print(f"code {puck_code} not found")
             return
         
-        media_path = str(PurePath(self.config['metadata']['data_folder'], self.config[puck_code]))
+        media_path = self._get_video_path(puck_code)
         media = self.instance.media_new(media_path)
         playlist = self.instance.media_list_new()
         playlist.add_media(media)
-        playlist.add_media(self.welcome_video)
+        playlist.add_media(self.welcome_video_media)
         self.playlist_player.set_media_list(playlist)
         self.playlist_player.play_item_at_index(0)
 
@@ -59,25 +62,32 @@ class VideoPlayer:
     def play_welcome(self):
         self.play_video('welcome_video')
 
+    def _add_new_puck(self, path = None):
+        code = input('drop puck: ').strip('\n')
+        if not path:
+            paths = list(Path(self.config['metadata']['data_folder']).iterdir())
+            for i,k in enumerate(paths):
+                print(f"{i+1}. {k.name}")
+            choice = input('type the key number requested: ')
+            self.config[code] = paths[int(choice)-1].name
+        else:
+            self.config[code] = path
+        print(f"set code {code} to video file {self.config[code]}")
+        return self.config[code]
+    
     def add_new_puck(self):
         self.player.stop()
-        def _add_new_puck(path = None):
-            code = input('drop puck: ').strip('\n')
-            if not path:
-                paths = list(Path(self.config['metadata']['data_folder']).iterdir())
-                for i,k in enumerate(paths):
-                    print(f"{i}. {k.name}")
-                choice = input('type the key number requested: ')
-                self.config[code] = paths[int(choice)].name
-            else:
-                self.config[code] = path
-            print(f"set code to video file {self.config[code]}")
-            return self.config[code]
-        path = _add_new_puck()
-        other_side = input("set other side? Y/n: ").strip('\n').lower()
-        if other_side == 'y' or other_side == '':
-            _add_new_puck(path)
-        # delete_previous = input("delete other puck with same video?")
+        add_pucks = True
+        while add_pucks:
+            path = self._add_new_puck()
+            other_side = input("set other side? Y/n: ").strip('\n').lower()
+            if other_side == 'y' or other_side == '':
+                self._add_new_puck(path)
+            another_puck = input("set another puck? Y/n: ").strip('\n').lower()
+            if another_puck == 'n':
+                add_pucks = False
+        
+        print('saving to dict...')
         self.save_dict()
 
 if __name__=="__main__":
